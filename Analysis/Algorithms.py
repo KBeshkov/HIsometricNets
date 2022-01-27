@@ -1323,6 +1323,23 @@ def temporal_phom(X,tbin=20):
     full_thom = full_hom_analysis(X.T,order=False,perm=200)[1]
     return [thoms,full_thom]
        
+'''
+Extracts the change of a topological feature as a function of some parameter (eg time)
+    phom: a list of persistence diagrams
+    features: the Betti numbers of the manifold that is being explored
+'''
+def extract_pers(phom,features = [[0]]):
+    dim = len(features)
+    points = len(phom)
+    pers_curves = [np.zeros([points,features[d]]) for d in range(dim)]
+    for p in range(points):
+        for d in range(dim):
+            try:
+                pers_curves[d][p,:] = np.sort(list(phom[p][d][:,1]-phom[p][d][:,0]))[-features[d]:]
+            except:
+                pers_curves[d][p,:] = 0
+    return pers_curves
+                    
     
 def complex_sqrt(x):
     cx = np.zeros(len(x),dtype=np.complex_)
@@ -2006,16 +2023,24 @@ def plot_stimtime_funct(X,xplots,yplots):
     x: a pointsXdim array for all the points at which the function is to be evaluated
     c: a list of centers of shape pointsXdim, where they repeat for each entry of points
 '''
-def RBF_kernels(x,c):
-    X = np.zeros([x.shape[0]*x.shape[1],len(c)])
-    for i in range(c):
-        X[:,i] = np.exp(np.sqrt(np.sum((x-c)**2,0))).flatten()
+def RBF_kernels(x,c,eps=1,weights=np.array([1,1])):
+    X = np.zeros([x.shape[0],len(c)])
+    for i in range(len(c)):
+        X[:,i] = np.exp(-eps[i]*((x-c[i])**2)@weights).flatten()
     return X
 
-def RBF_regress(y,x,centers):
-    X_design = RBF_kernels(x,centers)
-    beta = y @ np.pinv(X_design)
-    return beta
+def RBF_regress(y,x,centers,eps=1,weight=np.array([1,1])):
+    X_design = RBF_kernels(x,centers,eps=eps,weights=weight)
+    beta = y @ np.linalg.pinv(X_design.T)
+    return beta, X_design
     
     
+def NN_shift_operator(x,W,n,dt,mix_mat,stim,g=1):
+    x_new = np.copy(x)
+    for i in range(n):
+        x_new = x_new+dt*(-x_new+np.dot(g*W,np.tanh(x_new))+mix_mat@stim)
+    return x_new        
+    
+    
+
     
