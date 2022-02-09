@@ -2,41 +2,30 @@ import sys,os
 sys.path.append(os.getcwd())
 sys.path.append(os.getcwd()[:-7]+'Analysis')
 from Algorithms import *
-import numpy as np
 
 #%% Define input manifolds
-N_S1 = 1600 #the number of points from the manifold which to sample
+N_S1 = 400 #the number of points from the manifold which to sample
 
 #circle
-theta_S1 = np.linspace(0,2*np.pi,N_S1)
-S1 = np.array([np.cos(theta_S1),np.sin(theta_S1)])
+S1 = gen_mfld(N_S1,'S1', 1)
 
 #Sphere
-N_S2 = 40
-phi = np.linspace(0,np.pi,N_S2)
-theta = np.linspace(0,2*np.pi,N_S2)
-Phi, Theta = np.meshgrid(phi,theta)
-Phi_S2, Theta_S2 = Phi.flatten(), Theta.flatten()
-S2 = np.array([np.cos(Theta_S2)*np.sin(Phi_S2),np.sin(Theta_S2)*np.sin(Phi_S2),np.cos(Phi_S2)])
+N_S2 = 20
+S2 = gen_mfld(N_S2,'S2', 1)
 
 #Torus
-N_T2 = 40
-R = 1
-r= 0.66
-phi = np.linspace(0,2*np.pi,N_T2)
-theta = np.linspace(0,2*np.pi,N_T2)
-Phi, Theta = np.meshgrid(phi,theta)
-Phi_T2, Theta_T2 = Phi.flatten(), Theta.flatten()
-T2 = np.array([(R+r*np.cos(Theta_T2))*np.cos(Phi_T2),(R+r*np.cos(Theta_T2))*np.sin(Phi_T2),r*np.sin(Theta_T2)])
+N_T2 = 20
+T2 = gen_mfld(N_T2, 'T2',1,0.66)
+
 #%%
 #define network parameters
 N_net = 100 #the number of neurons in the network
 T = 400 #the number of time points for which to simulate
 init_x = np.zeros(N_net)#np.random.randn(N_net)
-Wmat = 15.1*np.random.randn(N_net,N_net)#gen_weight_mat(N_net,rank=3,g=3,svd='qr_decomp',eigenvals=[3,3,3])[0]#
+Wmat = 3.1*np.random.randn(N_net,N_net)#gen_weight_mat(N_net,rank=3,g=3,svd='qr_decomp',eigenvals=[3,3,3])[0]#
 np.fill_diagonal(Wmat,0)
 W_eig = np.linalg.eig(Wmat)[1]
-in_str = 1
+in_str = 3.1
 int_const = 0.01
 
 #iterate over each stimulus
@@ -49,7 +38,7 @@ for i in range(N_S1):
     I = np.matlib.repmat(I,T,1).T    
     net_S1[:,:,i] = low_rank_rnn(N_net,T,I,P=Wmat,init_x=init_x,mu=int_const)
 
-plot_stimtime_funct(net_S1,5,5)
+# plot_stimtime_funct(net_S1,5,5)
 
 ##Sphere
 S2_mix = np.random.randn(N_net,3)#np.real(W_eig[:,:3])#
@@ -59,7 +48,7 @@ for i in range(N_S2**2):
     I = np.matlib.repmat(I,T,1).T 
     net_S2[:,:,i] = low_rank_rnn(N_net,T,I,P=Wmat,init_x=init_x,mu=int_const)
 
-plot_stimtime_funct(net_S2,5,5)
+# plot_stimtime_funct(net_S2,5,5)
 
 ##Torus
 T2_mix = np.random.randn(N_net,3)#np.real(W_eig[:,:3])#
@@ -69,7 +58,7 @@ for i in range(N_T2**2):
     I = np.matlib.repmat(I,T,1).T    
     net_T2[:,:,i] = low_rank_rnn(N_net,T,I,P=Wmat,init_x=init_x,mu=int_const)
 
-plot_stimtime_funct(net_T2,3,3)
+# plot_stimtime_funct(net_T2,3,3)
 
 #%%Manifold analysis with PCA
 PCA_red = PCA()
@@ -102,9 +91,15 @@ plt.tight_layout()
 from matplotlib import animation
 
 #circle
-def animate(i,embedding):
+def animate(i,embedding,plot_basis = 'off', basis_vects=0, stim_vects=0):
     ax.cla()
     ax.scatter(embedding[0,i,:],embedding[1,i,:],embedding[2,i,:],s=4,c=np.linspace(0,1,len(embedding[0,0,:])))
+    if plot_basis=='on':
+        X,Y,Z = np.zeros(3), np.zeros(3), np.zeros(3) 
+        U, V, W = basis_vects[0], basis_vects[1], basis_vects[2]
+        US, VS, WS = stim_vects[0], stim_vects[1], stim_vects[2]
+        ax.quiver(X,Y,Z,U,V,W,color='k')
+        ax.quiver(X,Y,Z,US,VS,WS,color='g')
     x = np.mean(embedding[0,i,0])
     y = np.mean(embedding[1,i,1])
     z = np.mean(embedding[2,i,2])
@@ -115,59 +110,48 @@ def animate(i,embedding):
         azim = np.arctan(y/x)+np.pi
     else:
         azim = np.pi/2    
-    ax.view_init(inclin,azim)
-    ax.axis('off')
+    # ax.set_xlim3d(-1,1)   
+    # ax.set_ylim3d(-1,1)   
+    # ax.set_zlim3d(-1,1)
+    # ax.view_init(inclin,azim)
+    # ax.axis('off')
 
 #%%Circle animation
 fig = plt.figure(figsize=(6,6),dpi=200,constrained_layout=True)
 ax = plt.subplot(111,projection='3d')
 ax.axis('off')
 anim_S1 = animation.FuncAnimation(fig, animate, blit=False, frames = T,fargs=(transformed_S1_net,),interval=300)
+# anim_S2 = animation.FuncAnimation(fig, animate, blit=False, frames = T,fargs=(net_S1,'on',Wmat, S1_mix,),interval=300)
 
-#anim_S1.save(os.getcwd()[:-7]+'/Figures//S1_animation.gif', writer='Pillow')
 #%%Sphere animation
 fig = plt.figure(figsize=(6,6),dpi=200,constrained_layout=True)
 ax = plt.subplot(111,projection='3d')
 ax.axis('off')
 anim_S2 = animation.FuncAnimation(fig, animate, blit=False, frames = T,fargs=(transformed_S2_net,),interval=300)
+# anim_S2 = animation.FuncAnimation(fig, animate, blit=False, frames = T,fargs=(net_S2,'on',Wmat, S2_mix,),interval=300)
 
-#anim_S2.save(os.getcwd()[:-7]+'/Figures//S2_animation.gif', writer='Pillow')
 #%%Torus animation
 fig = plt.figure(figsize=(6,6),dpi=200,constrained_layout=True)
 ax = plt.subplot(111,projection='3d')
 ax.axis('off')
 anim_T2 = animation.FuncAnimation(fig, animate, blit=False, frames = T,fargs=(transformed_T2_net,),interval=300)
+# anim_T2 = animation.FuncAnimation(fig, animate, blit=False, frames = T,fargs=(net_T2,'on',Wmat, T2_mix,),interval=300)
 
-#anim_T2.save(os.getcwd()[:-7]+'\Figures\\T2_animation.gif', writer='Pillow')
 #%%Topological analysis of the manifolds through time
 phoms_S1 = []
 phoms_S2 = []
 phoms_T2 = []
 
-tpoints = 200
+tpoints = 300
 top_points = np.arange(1,tpoints)
 top_method = 'LP'
 for i in top_points:#range(T):
-    phoms_S1.append(normal_bd_dist(full_hom_analysis(net_S1[:,i,:].T,metric=top_method,dim=2,perm=300,R=-1,Eps=.1)[1]))#tda(net_S1[:,i,:].T,maxdim=2)['dgms'])#
-    phoms_S2.append(normal_bd_dist(full_hom_analysis(net_S2[:,i,:].T,metric=top_method,dim=2,perm=300,R=-1,Eps=.1)[1]))#tda(net_S2[:,i,:].T,maxdim=2)['dgms'])#
-    phoms_T2.append(normal_bd_dist(full_hom_analysis(net_T2[:,i,:].T,metric=top_method,dim=2,perm=300,R=-1,Eps=.1)[1]))#tda(net_T2[:,i,:].T,maxdim=2)['dgms'])#
+    phoms_S1.append(normal_bd_dist(full_hom_analysis(net_S1[:,i,:].T,metric=top_method,dim=2,perm=100,R=-1,Eps=.1)[1]))#tda(net_S1[:,i,:].T,maxdim=2)['dgms'])#
+    phoms_S2.append(normal_bd_dist(full_hom_analysis(net_S2[:,i,:].T,metric=top_method,dim=2,perm=100,R=-1,Eps=.1)[1]))#tda(net_S2[:,i,:].T,maxdim=2)['dgms'])#
+    phoms_T2.append(normal_bd_dist(full_hom_analysis(net_T2[:,i,:].T,metric=top_method,dim=2,perm=100,R=-1,Eps=.1)[1]))#tda(net_T2[:,i,:].T,maxdim=2)['dgms'])#
 bcurves_S1 = extract_pers(phoms_S1,[1,1,1])
 bcurves_S2 = extract_pers(phoms_S2,[1,1,1])
 bcurves_T2 = extract_pers(phoms_T2,[1,2,1])   
-
-
-# fig = plt.figure(dpi=300)
-# for p in range(len(top_points)):
-#     ax1 = plt.subplot(3,len(top_points),p+1)
-#     plot_diagrams(phoms_S1[p],legend='off')
-#     ax1.axis('off')
-#     ax2 = plt.subplot(3,len(top_points),p+tpoints+1)
-#     plot_diagrams(phoms_S2[p],legend='off')
-#     ax2.axis('off')
-#     ax3 = plt.subplot(3,len(top_points),p+2*tpoints+1)
-#     plot_diagrams(phoms_T2[p],legend='off')    
-#     ax3.axis('off')
-# plt.tight_layout()
 
 clrs = ['b','r','g']
 plt.figure(dpi=300)
@@ -179,30 +163,45 @@ for i in range(3):
     plt.subplot(3,1,3)
     plt.plot(bcurves_T2[i],clrs[i])
 plt.tight_layout()
-#%%fit stimulusXtime tunning functions for each manifold
-N_rbf = 300
 
-times = np.arange(0,int_const*T,int_const)
+#%% Calculate bottleneck distances between diagrams
+S1_H1_dmat = bottleneck_dmat(phoms_S1,phoms_S1)
+S2_H1_dmat = bottleneck_dmat(phoms_S2,phoms_S2)
+S2_H2_dmat = bottleneck_dmat(phoms_S2,phoms_S2,dim=2)
+T2_H1_dmat = bottleneck_dmat(phoms_T2,phoms_T2)
+T2_H2_dmat = bottleneck_dmat(phoms_T2,phoms_T2,dim=2)
 
-S1_space = np.meshgrid(times,theta_S1)
-S1_space = np.vstack([S1_space[0].flatten(),S1_space[1].flatten()]).T
-T_centers_S1 = np.max(times)*np.random.rand(N_rbf)
-Theta_centers_S1 = np.max(theta_S1)*np.random.rand(N_rbf)
-rbf_centers_S1 = np.vstack([T_centers_S1,Theta_centers_S1]).T
+#%% plot topological changes
+#Prepare matching between first and last step
+_,S1_matching = persim.bottleneck(phoms_S1[0][1],phoms_S1[-1][1],matching=True)
+_,S2_H1_matching = persim.bottleneck(phoms_S2[0][1],phoms_S2[-1][1],matching=True)
+_,S2_H2_matching = persim.bottleneck(phoms_S2[0][2],phoms_S2[-1][2],matching=True)
+_,T2_H1_matching = persim.bottleneck(phoms_T2[0][1],phoms_T2[-1][1],matching=True)
+_,T2_H2_matching = persim.bottleneck(phoms_T2[0][2],phoms_T2[-1][2],matching=True)
 
-S1_basis_pred = np.zeros(np.shape(net_S1))
-kern_sizes = np.linspace(0,10,N_rbf)
-for i in range(N_net):
-    S1_rbf_kerns = RBF_regress(net_S1[i].flatten(),S1_space,rbf_centers_S1,kern_sizes,weight=np.array([1,0.01]))
-    S1_basis_pred[i] = (S1_rbf_kerns[1]@S1_rbf_kerns[0]).reshape([T,N_S1])
-    print(i)
+plt.figure(dpi=200,constrained_layout=False)
 
-plt.figure(dpi=300)
-plt.subplot(2,1,1)
-plt.imshow(net_S1[-1])
-plt.subplot(2,1,2)
-plt.imshow(S1_basis_pred[-1])
+plt.subplot(5,2,1)
+persim.bottleneck_matching(phoms_S1[0][1], phoms_S1[-1][1], S1_matching)
+plt.subplot(5,2,2)
+plt.imshow(S1_H1_dmat)
+plt.subplot(5,2,3)
+persim.bottleneck_matching(phoms_S2[0][1], phoms_S2[-1][1], S2_H1_matching)
+plt.subplot(5,2,4)
+plt.imshow(S2_H1_dmat)
+plt.subplot(5,2,5)
+persim.bottleneck_matching(phoms_S2[0][2], phoms_S2[-1][2], S2_H2_matching)
+plt.subplot(5,2,6)
+plt.imshow(S2_H1_dmat)
+plt.subplot(5,2,7)
+persim.bottleneck_matching(phoms_T2[0][1], phoms_T2[-1][1], T2_H1_matching)
+plt.subplot(5,2,8)
+plt.imshow(T2_H2_dmat)
+plt.subplot(5,2,9)
+persim.bottleneck_matching(phoms_T2[0][2], phoms_T2[-1][2], T2_H2_matching)
+plt.subplot(5,2,10)
+plt.imshow(T2_H2_dmat)
 
-#%%
-#metric tensor
-dXdTheta = -2*S1_basis_pred*(S1_space-rbf_centers)**2
+plt.setp(plt.gcf().get_axes(), xticks=[], yticks=[],xlabel='',ylabel='')
+plt.tight_layout()
+
