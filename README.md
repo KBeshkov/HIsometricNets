@@ -1,4 +1,4 @@
-# StimMfldRnn
+# Hierarchical Quasi-Isometric Networks
 
 Requires:
 - Ripser https://ripser.scikit-tda.org/en/latest/
