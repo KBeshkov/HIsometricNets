@@ -1,6 +1,6 @@
+from Algorithms import *
 
 def geodesic(X,r=-1,eps=0.1,count=1):
-'''Numeric calcultion of geodesics using a shortest path graph algorithm'''
     Xn = np.copy(X)
     if r>0:
         N = len(Xn)
@@ -202,7 +202,8 @@ def recurrence_plot(X,thresh=0.1, func = lambda x: pairwise_distances(x)):
     
     
 
-def gen_weight_mat(N,rank,g=1,svd=True,eigenvals=[]):
+
+def gen_weight_mat(N,rank,g=1,svd=True,eigenvals=[],zero=False):
     P = np.zeros([N,N])
     if svd==False:
         for r in range(rank):
@@ -226,8 +227,9 @@ def gen_weight_mat(N,rank,g=1,svd=True,eigenvals=[]):
         np.fill_diagonal(J,0)
         return J, [U,D,V]
     elif svd=='qr_decomp':
-        A = 0.01*np.random.randn(N,N)
-        np.fill_diagonal(A,0)
+        # A = 0.01*np.random.randn(N,N)
+        A = ortho_group.rvs(N)
+        # np.fill_diagonal(A,0)
         U = np.linalg.qr(A)
         for i in range(N):
             if i<rank:
@@ -237,7 +239,8 @@ def gen_weight_mat(N,rank,g=1,svd=True,eigenvals=[]):
         P = U[0]@U[1]@U[0].T
         gX = ((g**2)/N)*np.random.randn(N,N)
         J = gX + P
-        # np.fill_diagonal(J,0)
+        if zero:
+            np.fill_diagonal(J,0)
         return J, U
     else:
         U = ortho_group.rvs(N)
@@ -246,10 +249,10 @@ def gen_weight_mat(N,rank,g=1,svd=True,eigenvals=[]):
         else:
             D = np.diag(np.concatenate([np.sort(np.random.randn(rank)),np.zeros(N-rank)]))
         V = ortho_group.rvs(N)
-        P = 5*rank*(np.matmul(U,np.matmul(D,V.T)))/N*rank
+        P = rank*(np.matmul(U,np.matmul(D,V.T)))/N*rank
         gX = ((g**2)/N)*np.random.randn(N,N)
         J = gX + P
-        np.fill_diagonal(J,0)
+        # np.fill_diagonal(J,0)
         return J, [U,D,V]
     
 def low_rank_rnn(N,T,I=0,P=0,rank=1,mu=0.05,init_x=[0],g=1,svd=False,act_fun=np.tanh):
@@ -324,3 +327,117 @@ def bottleneck_time(pdiags,dim=1,features=1,plot=False):
         plt.ylim([0,1])
         plt.plot([0,1],[0,1],'k')
     return pers_vals, matchings
+
+def visualize_functions(points,functs):
+    for i in functs:
+        plt.figure(dpi=200)
+        plt.plot(i(points))
+        
+def plot_grid(layer_list,fft=False):
+    if fft:
+        for i in range(len(layer_list)):
+            plt.figure(dpi=200)
+            n_figs = int(np.sqrt(len(layer_list[i])))
+            N = int(np.sqrt(len(layer_list[i].T)))
+            for j in range(n_figs**2):
+                rshaped_img = np.reshape(layer_list[i][j],[N,N])
+                rshaped_img = np.fft.ifftshift(rshaped_img)
+                rshaped_img = np.fft.fft2(rshaped_img)
+                rshaped_img = np.fft.fftshift(rshaped_img)
+                plt.subplot(n_figs,n_figs,j+1)
+                # plt.contourf(x,y,np.abs(rshaped_img),vmax=100000,levels=10)
+                plt.imshow(np.abs(rshaped_img),vmax=1)
+                plt.axis('off')
+            plt.tight_layout()
+        return
+    for i in range(len(layer_list)):
+        plt.figure(dpi=200)
+        n_figs = int(np.sqrt(len(layer_list[i])))
+        N = int(np.sqrt(len(layer_list[i].T)))
+        for j in range(n_figs**2):
+            rshaped_img = np.reshape(layer_list[i][j],[N,N])
+            plt.subplot(n_figs,n_figs,j+1)
+            plt.imshow(rshaped_img,vmin=-1,vmax=1)
+            plt.axis('off')
+        plt.tight_layout()
+        
+        
+def compute_kernel(model,data):
+    X = np.zeros([len(data),len(data)])
+    model_out = model(data.T)[1]
+    for i in range(len(data)):
+        for j in range(len(data)):
+            if i>=j:
+                X[i,j] = model_out[i]@model_out[j].T
+    X = X+X.T
+    return X/np.linalg.norm(X)
+
+
+def eval_expressivity(dat, iters=10, deg=20,plot=False, compositional=0):
+    scores = []
+    data = np.copy(dat)
+    for i in range(iters):
+        if compositional>0:
+            indcs = np.random.choice(np.arange(0,len(dat.T)),size=compositional,replace=False)
+            data = dat[:,indcs]
+        train_id = np.sort(np.random.choice(np.arange(0,len(dat)),size=int(0.7*len(dat)),replace=False))
+        test_id = np.setdiff1d(np.arange(0,len(dat)), train_id)
+        data_train = data[train_id]
+        data_test = data[test_id]
+        rand_poly = npoly.chebyshev.chebval(np.linspace(-1,1,len(data)),0.1*np.random.randn(deg))
+        poly_fit = LinearRegression().fit(data_train,rand_poly[train_id])
+        scores.append(poly_fit.score(data_test,rand_poly[test_id]))
+    if plot:
+        plt.plot(rand_poly)
+        plt.plot(poly_fit.predict(data))
+    return scores
+
+
+def persistence_landscape_distance(pdiag1,pdiag2,d=1,plot=False):
+    pers_lands1 = persim.landscapes.PersLandscapeApprox(dgms=pdiag1,hom_deg=d)
+    pers_lands2 = persim.landscapes.PersLandscapeApprox(dgms=pdiag2,hom_deg=d)
+    [pland1_snapped, pland2_snapped] = persim.landscapes.snap_pl([pers_lands1, pers_lands2])
+    true_diff_pl = pland1_snapped - pland2_snapped
+    significance = true_diff_pl.sup_norm()
+    print(f'The threshold for significance is {significance}.')
+    if plot:
+        plt.figure()
+        persim.landscapes.plot_landscape_simple(true_diff_pl)
+        plt.legend([])
+    return pers_lands1, pers_lands2, true_diff_pl
+    
+
+def binary_hierarchical_labeling(nclasses,npoints): 
+    labels = []
+    for l in range(len(nclasses)):
+        labels.append(np.zeros(npoints))
+        for k in range(nclasses[l]):
+            interval = int(npoints/nclasses[l])
+            labels[l][k*interval:(k+1)*interval] = k
+    return labels
+        
+        
+def hierarchical_labeling_from_data(labels,pairings):
+       lbls_new = []
+       for l in labels:
+           lbls_new.append(np.where(l == pairings)[0][0])
+       return np.asarray(lbls_new)
+        
+def generate_gratings(res,angle,sfq):
+    R = np.array([[np.cos(angle),-np.sin(angle)],[np.sin(angle),np.cos(angle)]])
+    k = np.array([1,0])
+    k_r = sfq*R@k
+    x = np.linspace(-1,1,res)
+    X,Y = np.meshgrid(x,x)
+    grating = np.cos(k_r[0]*Y+k_r[1]*X)
+    return grating/np.linalg.norm(grating)
+
+
+def generate_gabors(res,angle,sfq,width,aspectr=1):
+    X,Y = np.meshgrid(np.linspace(-1,1,res),np.linspace(-1,1,res))
+    xp = X*np.cos(angle)+Y*np.sin(angle)
+    yp = -X*np.sin(angle)+Y*np.cos(angle)
+    g_filt = np.exp(-(xp**2+(yp*aspectr)**2)/2*width**2)*np.cos(2*np.pi*sfq*(xp))
+    return g_filt/np.linalg.norm(g_filt)
+
+
