@@ -2,63 +2,80 @@ import sys,os
 sys.path.append(os.getcwd())
 sys.path.append(os.getcwd()[:-7]+'Analysis')
 from Algorithms import *
+from metrics import *
 
 #%% Define input manifolds
-N_S1 = 400 #the number of points from the manifold which to sample
+N_S1 = 900 #the number of points from the manifold which to sample
+mfld_gen = Manifold_Generator()
 
 #circle
-S1 = gen_mfld(N_S1,'S1', 1)
+S1 = mfld_gen.S1(N_S1, 1)
 
 #Sphere
-N_S2 = 20
-S2 = gen_mfld(N_S2,'S2', 1)
+N_S2 = 30
+S2 = mfld_gen.S2(N_S2, 1)
 
 #Torus
-N_T2 = 20
-T2 = gen_mfld(N_T2, 'T2',1,0.66)
+N_T2 = 30
+T2 = mfld_gen.T2(N_T2,1,0.66)
 
+#Klein bottle (we just have to..)
+N_KB = 30
+KB = mfld_gen.KB(N_KB)
 #%%
 #define network parameters
-N_net = 100 #the number of neurons in the network
+N_net = 80 #the number of neurons in the network
 T = 400 #the number of time points for which to simulate
 init_x = np.zeros(N_net)#np.random.randn(N_net)
-Wmat = 3.1*np.random.randn(N_net,N_net)#gen_weight_mat(N_net,rank=3,g=3,svd='qr_decomp',eigenvals=[3,3,3])[0]#
-np.fill_diagonal(Wmat,0)
+x = np.arange(1,N_net+1)#range of eigenvalues
+eigvals = 3*x**(-20.)
+Wmat = gen_weight_mat(N_net,N_net,g=0,svd='qr_decomp',eigenvals=eigvals,zero=0)[0]#3.1*np.random.randn(N_net,N_net)#gen_weight_mat(N_net,rank=3,g=3,svd='qr_decomp',eigenvals=[3,3,3])[0]#
+# np.fill_diagonal(Wmat,0)
 W_eig = np.linalg.eig(Wmat)[1]
-in_str = 3.1
+in_str = 3
 int_const = 0.01
+slope = 1
+s = 0.1
 
 #iterate over each stimulus
 
 ##Circle
-S1_mix = np.random.randn(N_net,2)#np.real(W_eig[:,:2])#
+S1_mix = np.real((1-s)*W_eig[:,-2:]+s*W_eig[:,:2])
 net_S1 = np.zeros([N_net,T,N_S1])
 for i in range(N_S1):
     I = in_str*S1_mix@S1[:,i]
     I = np.matlib.repmat(I,T,1).T    
-    net_S1[:,:,i] = low_rank_rnn(N_net,T,I,P=Wmat,init_x=init_x,mu=int_const)
+    net_S1[:,:,i] = low_rank_rnn(N_net,T,I,P=Wmat,init_x=init_x,mu=int_const,act_fun = lambda x: np.tanh(slope*x))
 
 # plot_stimtime_funct(net_S1,5,5)
 
 ##Sphere
-S2_mix = np.random.randn(N_net,3)#np.real(W_eig[:,:3])#
+S2_mix = np.real((1-s)*W_eig[:,-3:]+s*W_eig[:,:3])
 net_S2 = np.zeros([N_net,T,N_S2**2])
 for i in range(N_S2**2):
     I = in_str*S2_mix@S2[:,i]
     I = np.matlib.repmat(I,T,1).T 
-    net_S2[:,:,i] = low_rank_rnn(N_net,T,I,P=Wmat,init_x=init_x,mu=int_const)
+    net_S2[:,:,i] = low_rank_rnn(N_net,T,I,P=Wmat,init_x=init_x,mu=int_const,act_fun = lambda x: np.tanh(slope*x))
 
 # plot_stimtime_funct(net_S2,5,5)
 
 ##Torus
-T2_mix = np.random.randn(N_net,3)#np.real(W_eig[:,:3])#
+T2_mix = np.real((1-s)*W_eig[:,-3:]+s*W_eig[:,:3])
 net_T2 = np.zeros([N_net,T,N_T2**2])
 for i in range(N_T2**2):
     I = in_str*T2_mix@T2[:,i]
     I = np.matlib.repmat(I,T,1).T    
-    net_T2[:,:,i] = low_rank_rnn(N_net,T,I,P=Wmat,init_x=init_x,mu=int_const)
+    net_T2[:,:,i] = low_rank_rnn(N_net,T,I,P=Wmat,init_x=init_x,mu=int_const,act_fun = lambda x: np.tanh(slope*x))
 
 # plot_stimtime_funct(net_T2,3,3)
+
+#Klein bottle
+KB_mix = np.real((1-s)*W_eig[:,-3:]+s*W_eig[:,:3])
+net_KB = np.zeros([N_net,T,N_KB**2])
+for i in range(N_KB**2):
+    I = in_str*KB_mix@KB[:,i]
+    I = np.matlib.repmat(I,T,1).T    
+    net_KB[:,:,i] = low_rank_rnn(N_net,T,I,P=Wmat,init_x=init_x,mu=int_const,act_fun = lambda x: np.tanh(slope*x))
 
 #%%Manifold analysis with PCA
 PCA_red = PCA()
@@ -67,26 +84,46 @@ PCA_red = PCA()
 transformed_S1_net = np.zeros(np.shape(net_S1))
 transformed_S2_net = np.zeros(np.shape(net_S2))
 transformed_T2_net = np.zeros(np.shape(net_T2))
+transformed_KB_net = np.zeros(np.shape(net_KB))
 for i in range(T):
     transformed_S1_net[:,i,:] = PCA().fit_transform(net_S1[:,i,:].T).T
     transformed_S2_net[:,i,:] = PCA().fit_transform(net_S2[:,i,:].T).T
     transformed_T2_net[:,i,:] = PCA().fit_transform(net_T2[:,i,:].T).T
+    transformed_KB_net[:,i,:] = PCA().fit_transform(net_KB[:,i,:].T).T
 
+#%%
+# colmap = plt.cm.inferno(np.linspace(0,1,int(T/2)))
+# fig = plt.figure(dpi=200,figsize=(4,2))
+# ax = plt.subplot(111,projection='3d')
+# ax.axis('off')
+# plot_points = np.arange(0,int(T/2),int(T/10))
+# for t in plot_points:
+#     # ax.scatter(transformed_S1_net[0,t,:],transformed_S1_net[1,t,:],500*t*np.ones(N_S1),s=1,c=np.linspace(0,1,N_S1))
+#     ax.plot(10*t*np.ones(N_S1),transformed_S1_net[0,t,:],transformed_S1_net[1,t,:],'.',color=colmap[t],alpha=0.5)
 
-plot_points = [2,5,20,100]
-fig = plt.figure(dpi=300)
+plot_points = [2,25,50,100,T-1]
+colmap = 'viridis'
 for p in range(len(plot_points)):
-    ax1 = plt.subplot(3,len(plot_points),p+1)
-    ax1.scatter(transformed_S1_net[0,plot_points[p],:],transformed_S1_net[1,plot_points[p],:],c=np.linspace(0,1,N_S1))
+    fig = plt.figure(dpi=400,figsize=(2,2))
+    ax1 = plt.subplot(111,projection='3d')
+    ax1.scatter(transformed_S1_net[0,plot_points[p],:],transformed_S1_net[1,plot_points[p],:],transformed_S1_net[2,plot_points[p],:],
+                s=1,c=np.linspace(0,1,N_S1),cmap=colmap,alpha=0.4)
     ax1.axis('off')
-    ax2 = plt.subplot(3,len(plot_points),p+5,projection='3d')
-    ax2.scatter(transformed_S2_net[0,plot_points[p],:],transformed_S2_net[1,plot_points[p],:],transformed_S2_net[2,plot_points[p],:],s=4,c=np.linspace(0,1,N_S2**2))
+    # plt.savefig('../Results/Figures/S1_t'+str(p)+'.png',transparent=True)
+    fig = plt.figure(dpi=400,figsize=(2,2))
+    ax2 = plt.subplot(111,projection='3d')
+    ax2.scatter(transformed_S2_net[0,plot_points[p],:],transformed_S2_net[1,plot_points[p],:],transformed_S2_net[2,plot_points[p],:],
+                s=1,c=np.linspace(0,1,N_S2**2),cmap=colmap,alpha=0.4)
     ax2.axis('off')
-    ax3 = plt.subplot(3,len(plot_points),p+9,projection='3d')
-    ax3.scatter(transformed_T2_net[0,plot_points[p],:],transformed_T2_net[1,plot_points[p],:],transformed_T2_net[2,plot_points[p],:],s=4,c=np.linspace(0,1,N_T2**2))
+    # plt.savefig('../Results/Figures/S2_t'+str(p)+'.png',transparent=True)
+    fig = plt.figure(dpi=400,figsize=(2,2))
+    ax3 = plt.subplot(111,projection='3d')
+    ax3.scatter(transformed_T2_net[0,plot_points[p],:],transformed_T2_net[1,plot_points[p],:],transformed_T2_net[2,plot_points[p],:],
+                s=1,c=np.linspace(0,1,N_T2**2),cmap=colmap,alpha=0.4)
     ax3.axis('off')
-plt.tight_layout()
-
+    # plt.savefig('../Results/Figures/T2_t'+str(p)+'.png',transparent=True)
+# plt.tight_layout()
+# plt.savefig('../Results/manifolds.png')
 #%%animate pca dynamics
 from matplotlib import animation
 
@@ -136,6 +173,12 @@ ax = plt.subplot(111,projection='3d')
 ax.axis('off')
 anim_T2 = animation.FuncAnimation(fig, animate, blit=False, frames = T,fargs=(transformed_T2_net,),interval=300)
 # anim_T2 = animation.FuncAnimation(fig, animate, blit=False, frames = T,fargs=(net_T2,'on',Wmat, T2_mix,),interval=300)
+
+#%%Klein bottle animation
+fig = plt.figure(figsize=(6,6),dpi=200,constrained_layout=True)
+ax = plt.subplot(111,projection='3d')
+ax.axis('off')
+anim_T2 = animation.FuncAnimation(fig, animate, blit=False, frames = T,fargs=(transformed_KB_net,),interval=300)
 
 #%%Topological analysis of the manifolds through time
 phoms_S1 = []
