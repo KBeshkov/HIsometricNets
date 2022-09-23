@@ -1,4 +1,4 @@
-# Hierarchical Quasi-Isometric Networks
+# Hierarchical Isometric Networks
 
 Requires:
 - Ripser https://ripser.scikit-tda.org/en/latest/
