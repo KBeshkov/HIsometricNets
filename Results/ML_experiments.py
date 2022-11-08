@@ -25,20 +25,20 @@ N_net = 50
 n_layers = 4
 test_add = 20 #determines how many extra samples to add
 f_M = lambda x: x
-data = f_M(mfld_gen.KB(N,2,1))
+data = f_M(mfld_gen.T2(N,1,0.66))
 
 D = len(data)
 noise_std = 0.01
-dat_test = f_M(mfld_gen.KB(N+test_add,2,1))+noise_std*np.random.randn(len(data),(N+test_add)**2)
+dat_test = f_M(mfld_gen.T2(N+test_add,1,0.66))+noise_std*np.random.randn(len(data),(N+test_add)**2)
 
 #define the classes on the manifold
-nclass = 5
+nclass = 9
 classes = np.linspace(0,N**2,nclass).astype(int)
 test_classes = np.linspace(0,(test_add+N)**2,nclass).astype(int)
 labels = 0.1*np.ones(N**2)
 labels_test = 0.1*np.ones((N+test_add)**2)
 count=0
-perturb_weight = 0 #choose whether to perturb the points slightly to avoid highly overlapping datapoints 
+perturb_weight = 1e-3 #choose whether to perturb the points slightly to avoid highly overlapping datapoints 
 for i in range(nclass-1):
     labels[classes[i]:classes[i+1]] = count
     train_perturb = perturb_weight*np.matlib.repmat(np.mean(data[:,labels==count],1),sum(labels==count),1).T
@@ -59,7 +59,7 @@ epoch_n = 10000
 
 train_type = 'Metric'
 if train_type=='Metric':
-    loss_weights = [1,100]
+    loss_weights = [1,1]
 elif train_type =='CSE':
     loss_weights = [1,0]
     

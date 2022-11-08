@@ -1,8 +1,6 @@
 #implementation of algorithms
 import math
 import numpy as np
-import time as time
-from cmath import sqrt as isqrt
 
 from matplotlib import cm
 import matplotlib.pyplot as plt
@@ -14,7 +12,6 @@ import matplotlib.animation as animation
 
 import numpy.matlib
 import numpy.polynomial as npoly
-import random
 
 from scipy import stats
 from scipy.spatial import ConvexHull
@@ -27,10 +24,6 @@ from sklearn.metrics import pairwise_distances, r2_score
 from sklearn.linear_model import LinearRegression, Lasso, Ridge
 from sklearn.decomposition import PCA
 
-import persim
-import persim.landscapes
-from ripser import ripser as tda
-from persim import plot_diagrams
 import umap.umap_ as umap
 
 class Manifold_Generator:
@@ -82,100 +75,3 @@ class Manifold_Generator:
         z = (2/15)*(3+5*np.cos(Phi_KB)*np.sin(Phi_KB))*np.sin(Theta_KB)
         KB = np.array([x,y,z])
         return KB 
-        
-class Persistent_Homology:
-    def __init__(self):
-        None
-
-    def __call__(self, manifold, metric, normalized, *args):
-        distance_matrix, birth_death_diagram = self.homology_analysis(manifold, metric, *args)
-        return [distance_matrix, self.normalize(birth_death_diagram) if normalized else birth_death_diagram]
-
-    def homology_analysis(self, manifold, metric, *args):
-        '''
-            Computes persistent homology
-            -----------------------
-            Outputs the distance_matrix and birth_death_diagram for the given manifold and metric. 
-        '''
-        distance_matrix = metric(manifold)
-        birth_death_diagram = tda(distance_matrix, distance_matrix=True , maxdim=args[0], n_perm=args[1])['dgms']   
-        return distance_matrix, birth_death_diagram
-
-    def normalize(self, birth_death_diagram):
-        '''
-            Normalized birth/death distance
-            -----------------------
-            Outputs the persistence of a feature normalized between 0 and 1. 
-        '''
-        birth_death_diagram_copy = np.copy(birth_death_diagram)
-        a = np.concatenate(birth_death_diagram_copy).flatten()
-        finite_dgm = a[np.isfinite(a)]
-        ax_min, ax_max = np.min(finite_dgm), np.max(finite_dgm)
-        x_r = ax_max - ax_min
-
-        buffer = x_r / 5
-
-        x_down = ax_min - buffer / 2
-        x_up = ax_max + buffer
-
-        y_down, y_up = x_down, x_up
-        yr = y_up - y_down
-        b_inf = y_down + yr * 0.95
-        norm_pers = []
-        for i in range(len(birth_death_diagram)):
-            norm_pers.append((birth_death_diagram[i])/b_inf)
-        return norm_pers    
-
-class Betti:
-    def __init__(self):
-        None
-
-    def histograms(self, birth_death_diagram, binslst=[20,15,10]):
-        ''' 
-            Betti number persistance histograms
-            -----------------------
-            Outputs a list of histograms for persistance/birth/death for all specified Betti numbers.
-        '''
-        histograms = []
-        persistant_values = []
-        for i in range(len(birth_death_diagram)):
-            persistant_values.append(birth_death_diagram[i][:,1] - birth_death_diagram[i][:,0])
-            b_i = np.histogram(birth_death_diagram[i][:,1] - birth_death_diagram[i][:,0], np.linspace(0, 0.1, binslst[i]), density=True)
-            histograms.append(b_i)
-        return [persistant_values, histograms]
-        
-    def curves(self, birth_death_diagram, number_of_curves=3, epsilon = 0.001, duration=1000):
-        '''
-            Betti curves
-            -----------------------
-            Outputs a list of Betti curves, indicating how many n-holes there are for a given epsilon value.
-        '''
-        curves = []
-        finite_dgm = birth_death_diagram[0][np.isfinite(birth_death_diagram[0])]
-        x_maxs = []
-        for i in range(len(birth_death_diagram)):
-            if len(birth_death_diagram[i])>0 and i!=0:
-                x_maxs.append(np.max(birth_death_diagram[i]))
-            else:
-                x_maxs.append(np.max(finite_dgm))
-        e = np.copy(epsilon)
-        for i in range(len(birth_death_diagram)):
-            Bn = np.zeros(duration)
-            for j in range(duration):
-                count = 0 
-                for k in range(len(birth_death_diagram[i][:,0])):
-                    if birth_death_diagram[i][k,0]<epsilon and birth_death_diagram[i][k,1]>epsilon:
-                        count = count + 1
-                Bn[j] = count
-                epsilon = epsilon + e
-            epsilon = np.copy(e)
-            curves.append(Bn)
-        return [np.linspace(0, epsilon*duration, duration), curves]
-
-# class Eigendiffusion:
-#     def __init__(self,):
-        
-        
-        
-        
-    

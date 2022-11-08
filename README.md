@@ -1,5 +1,8 @@
+#Code for Isometric Representations in Neural Networks Improve Robustness
+=======
 # Hierarchical Isometric Networks
 
-Requires:
-- Ripser https://ripser.scikit-tda.org/en/latest/
-- Persim https://persim.scikit-tda.org/en/latest/index.html
+
+##Requirements
+- Umap
+- Pytorch
