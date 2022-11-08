@@ -10,20 +10,21 @@ import seaborn as sns
 import pickle
 
 plt.rcParams['font.family'] = 'Arial'
-plt.rcParams.update({'font.size': 14})
+plt.rcParams.update({'font.size': 18})
 pallette = plt.rcParams['axes.prop_cycle'].by_key()['color']
 pallette2 = sns.color_palette('colorblind')
-plt.style.use('default')#../misc/report.mplstyle')
+pallette3 = sns.color_palette('tab20c')
+plt.style.use('default')
 #%% Load entangled loop data
-with open('/Users/constb/Repos/copies/StimMfldRnn/Data/train_rings.pkl', 'rb') as handle:
+with open('../Data/train_rings.pkl', 'rb') as handle:
     Toy_data_train = pickle.load(handle)
-with open('/Users/constb/Repos/copies/StimMfldRnn/Data/test_rings.pkl', 'rb') as handle:
+with open('../Data/test_rings.pkl', 'rb') as handle:
     Toy_data_test = pickle.load(handle)
     
 #%%ML
 from ML_models import *
 
-N_net = 100
+N_net = 20
 n_layers = 4
 data = Toy_data_train[0].T
 
@@ -41,13 +42,12 @@ performance = []
 model = NN_class(N_net,D,len(np.unique(labels)),[],[],n_layers).double()
 dmat = torch.cdist(train_data[0].T,train_data[0].T)
 init_run = torch.tensor(predict(model,train_data[0].T)[1])
-criterion = MetricPreservationLoss(lambda1=100,lambda2=0)
 optimizer = optim.Adam(model.parameters())
-epoch_n = 500
+epoch_n = 10000
 
 train_type = 'Metric'
 if train_type=='Metric':
-    loss_weights = [1,100]
+    loss_weights = [1,1]
 elif train_type =='CSE':
     loss_weights = [1,0]
     
@@ -85,7 +85,7 @@ for i in range(nclass):
 ax1.set_axis_off()
 # plt.savefig('../Figures/Rings_class.png',transparent=True,dpi=1000)
 
-pca_pred = umap.UMAP(n_neighbors=40,min_dist=1,n_components=3).fit_transform(predictions[0]).T
+pca_pred = umap.UMAP(n_neighbors=40,min_dist=0.25,n_components=3).fit_transform(predictions[0]).T
 
 fig=plt.figure(dpi=300,figsize=(2,2))
 ax2 = fig.add_subplot(1,1,1,projection='3d')
@@ -96,9 +96,26 @@ ax2.set_axis_off()
 plt.tight_layout()
 # plt.savefig('../Figures/Rings_class_dec_'+train_type+'.png',transparent=True,dpi=1000)
 
-#%%Computing the Betti numbers through layers
-Phomer = Persistent_Homology()
-phoms_full = [Phomer(model.lim_forward(test_data[0].T,i).detach().numpy(),geodesic,True,1,100) for i in range(n_layers)]
-phoms_1 = [Phomer(model.lim_forward(test_data[0][:,labels_test==0].T,i).detach().numpy(),geodesic,True,1,100) for i in range(n_layers)]
-phoms_2 = [Phomer(model.lim_forward(test_data[0][:,labels_test==1].T,i).detach().numpy(),geodesic,True,1,100) for i in range(n_layers)]
+#%%
+True_dist = pairwise_distances(test_data[0].T)
+if train_type=='Metric':
+    ISO_dist = pairwise_distances(predictions[0])
+if train_type=='CSE':
+    CSE_dist = pairwise_distances(predictions[0])
 
+plt.figure()
+plt.subplot(2,1,1)
+sns.histplot(True_dist[labels_test==0,:][:,labels_test==0].flatten(),color=pallette3[0],alpha=1,bins=np.linspace(0,10,300))
+sns.histplot(ISO_dist[labels_test==0,:][:,labels_test==0].flatten(),color=pallette3[8],alpha=0.8,bins=np.linspace(0,10,300))
+sns.histplot(CSE_dist[labels_test==0,:][:,labels_test==0].flatten(),color=pallette3[4],alpha=1,bins=np.linspace(0,10,300))
+plt.yscale('log')
+plt.legend(['Truth','LIL','CSE'])
+plt.xticks([])
+plt.subplot(2,1,2)
+sns.histplot(True_dist[labels_test==1,:][:,labels_test==1].flatten(),color=pallette3[0],alpha=1,bins=np.linspace(0,10,300))
+sns.histplot(ISO_dist[labels_test==1,:][:,labels_test==1].flatten(),color=pallette3[8],alpha=0.8,bins=np.linspace(0,10,300))
+sns.histplot(CSE_dist[labels_test==1,:][:,labels_test==1].flatten(),color=pallette3[4],alpha=1,bins=np.linspace(0,10,300))
+plt.yscale('log')
+plt.tight_layout()
+
+# plt.savefig('../Figures/Rings_distance_distributions.png', dpi=1000,transparent=True)
