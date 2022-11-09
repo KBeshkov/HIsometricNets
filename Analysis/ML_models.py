@@ -466,7 +466,19 @@ def tree_distances(hierarchy):
     return adjacency_mat, dmat
     
 
-
+def compute_featurized_distances(model, datapoints, targets):
+    dmat = torch.zeros([len(datapoints),len(datapoints)])
+    classes = torch.unique(torch.Tensor(targets))
+    for c in classes:
+        class_inds = torch.where(torch.Tensor(targets)==c)[0]
+        class_out = torch.squeeze(model(datapoints[class_inds]))
+        d_class = torch.cdist(class_out,class_out)
+        for i in range(len(d_class)):
+            for j in range(len(d_class)):
+                if i>j:
+                    dmat[class_inds[i],class_inds[j]] = d_class[i,j]
+        print(c)
+    return dmat.T+dmat
 
 
 
