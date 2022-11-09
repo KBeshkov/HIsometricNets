@@ -26,7 +26,7 @@ from cifar10_models.vgg import vgg11_bn, vgg13_bn, vgg16_bn, vgg19_bn
 feature_model = vgg13_bn(pretrained=True)
 feature_model.eval() # for evaluation
 #%%
-Iso_coef = 100
+Iso_coef = 1
 
 transform=transforms.Compose([transforms.ToTensor()])
 
@@ -45,9 +45,9 @@ data_part_test = data_test_hierarchy.__hierarchy__(partition)
 hierarchical_trainloader = torch.utils.data.DataLoader(data_train_hierarchy, batch_size=200, shuffle=True)
 hierarchical_testloader = torch.utils.data.DataLoader(data_test_hierarchy, batch_size=200, shuffle=True)
   
-precomputed_dmat='iterate'
+precomputed_dmat = True
 if precomputed_dmat == True:
-    CIFAR_dmat = torch.load(os.getcwd()[:-8]+'/Data/CIFAR10_dmat.pt').double() #Precomputed distance matrix between MNIST images
+    CIFAR_dmat = torch.load(os.getcwd()[:-8]+'/Data/CIFAR10_dmat_features.pt').double() #Precomputed distance matrix between MNIST images
 elif precomputed_dmat=='standard':
     CIFAR_dmat='standard'
 else:
@@ -55,20 +55,45 @@ else:
 res = int(2*(data_train[0][0].size()[-1]/2)**2)
 
 #%% Train Model
-nlayers = 10
+nlayers = 5
 nclass = len(partition)
-n_nrns = 500
+n_nrns = 100
 network_params = {'n_neurons': n_nrns, 'n_inputs': res,'n_classes': 10,
                   'projection': [],'weights': [],'n_layers': nclass*nlayers,'feature_model':feature_model.features}
 HRIM = HierarchicalRepresentationNetwork(NN_class(**network_params).double().to('cpu'),savepoints=25)
 
+#%%
 HRIM_test = HRIM.test(hierarchical_testloader)
 print('Before training:' +str(HRIM_test))
+K = 10
+costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss]]
 
-costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, 1).Loss]]
-
-HRIM_data = HRIM.train(hierarchical_trainloader, costs, dmat=CIFAR_dmat,epochs=2)
+HRIM_data = HRIM.train(hierarchical_trainloader, costs, dmat=CIFAR_dmat,epochs=1)
 
 #%% Test model
 HRIM_test = HRIM.test(hierarchical_testloader)
 print(HRIM_test)
+
+#%% Testing adverserial attacks
+
+#define epsilon ranges
+epsilons = np.logspace(-2,0,10)
+
+
+costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, 1).Loss]]
+
+attack_type = 'fgsm'
+adv_attacks = []
+for e in epsilons:
+    adv_attacks.append(HRIM.hierarchical_test_attack(hierarchical_testloader,costs,
+                                                     epsilon=e, attack_method=attack_type))
+
+class_performance = np.hstack([adv_attacks[i][0] for i in range(len(epsilons))]).T
+orig_images1 = [np.reshape(adv_attacks[i][1][-1][2][5],[28,28]) for i in range(len(epsilons))]
+orig_labels1 = [adv_attacks[i][1][-1][0][5] for i in range(len(epsilons))]
+orig_images2 = [np.reshape(adv_attacks[i][1][-1][2][3],[28,28]) for i in range(len(epsilons))]
+orig_labels2 = [adv_attacks[i][1][-1][0][3] for i in range(len(epsilons))]
+pert_images1 = [np.reshape(adv_attacks[i][1][-1][3][5],[28,28]) for i in range(len(epsilons))]
+pert_labels1 = [adv_attacks[i][1][-1][1][5] for i in range(len(epsilons))]
+pert_images2 = [np.reshape(adv_attacks[i][1][-1][3][3],[28,28]) for i in range(len(epsilons))]
+pert_labels2 = [adv_attacks[i][1][-1][1][3] for i in range(len(epsilons))]

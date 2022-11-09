@@ -23,7 +23,7 @@ from Algorithms import *
 from metrics import *
 from ML_models import *
 
-Iso_coef = 0.001
+Iso_coef = 0.1
 
 transform=transforms.Compose([transforms.ToTensor()])
 
@@ -57,7 +57,8 @@ network_params = {'n_neurons': n_nrns, 'n_inputs': res**2,'n_classes': 10,
                   'projection': [],'weights': [],'n_layers': nclass*nlayers}
 HRIM = HierarchicalRepresentationNetwork(NN_class(**network_params).double().to('cpu'),savepoints=25)
 
-costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, 1).Loss]]
+K = 10
+costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss]]
 
 HRIM_data = HRIM.train(hierarchical_trainloader, costs, dmat=MNIST_dmat,epochs=5)
 
@@ -71,7 +72,7 @@ print(HRIM_test)
 epsilons = np.logspace(-2,0,10)
 
 
-costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, 1).Loss]]
+costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss]]
 
 attack_type = 'fgsm'
 adv_attacks = []
