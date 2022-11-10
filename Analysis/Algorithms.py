@@ -24,7 +24,7 @@ from sklearn.metrics import pairwise_distances, r2_score
 from sklearn.linear_model import LinearRegression, Lasso, Ridge
 from sklearn.decomposition import PCA
 
-import umap.umap_ as umap
+#import umap.umap_ as umap
 
 class Manifold_Generator:
     def __init__(self):

@@ -276,7 +276,7 @@ class HierarchicalRepresentationNetwork:
     def train(self,data_loader,costs,dmat='standard',epochs=100,plot=True):
         labels = data_loader.dataset.labels
         train_shape = data_loader.dataset.x.shape
-        train_data = torch.reshape(data_loader.dataset.x,[train_shape[0],np.prod(train_shape[1:])])
+        train_data = torch.reshape(data_loader.dataset.x,[train_shape[0],np.prod(train_shape[1:])]).to(self.device)
         running_loss = [[] for l in range(len(labels))]
         running_loss1 = [[] for l in range(len(labels))]
         running_loss2 = [[] for l in range(len(labels))]
@@ -290,19 +290,19 @@ class HierarchicalRepresentationNetwork:
             for batch_n, (data, targets,indices) in enumerate(data_loader):
                 for branch in range(len(labels)):
                     if dmat=='iterate':
-                        feat_map = torch.squeeze(self.model.feature_model(data.double()))
+                        feat_map = torch.squeeze(self.model.feature_model(data.double().to(self.device)))
                         dmat_temp = torch.cdist(feat_map,feat_map)
-                    labels_d = pair_labels(targets[branch])
+                    labels_d = pair_labels(targets[branch]).to(self.device)
                     
                     optimizer.zero_grad()
                     
-                    outs = self.prop_forward(data,class_depth*branch+class_depth)
-                    loss1 = costs[branch][0](outs[1],targets[branch])
+                    outs = self.prop_forward(data.to(self.device),class_depth*branch+class_depth)
+                    loss1 = costs[branch][0](outs[1],targets[branch].to(self.device))
                     if costs[branch][1]!=0:
                         if dmat=='iterate':
                             loss2, c = costs[branch][1](outs[0],dmat_temp,labels_d)
                         else:
-                            loss2, c = costs[branch][1](outs[0],dmat[indices,:][:,indices],labels_d)
+                            loss2, c = costs[branch][1](outs[0],dmat[indices,:][:,indices].to(self.device),labels_d)
                         Lipschitz_constants.append(c)
                     else:
                         loss2 = 0
@@ -323,8 +323,8 @@ class HierarchicalRepresentationNetwork:
                         print(str(loss.item())+': '+str(loss1.item())+' due to CSE loss :'+str(loss2.item())+' due to Isometric loss')
                     
             if ep%self.savepoints==0:
-                forward_runs = [self.prop_forward(data, class_depth*branch+class_depth) for i in range(1,len(labels)+1)]
-                performance = [torch.sum(torch.argmax(forward_runs[i][1],1)==targets[i])/len(targets[i]) for i in range(len(labels))]
+                forward_runs = [self.prop_forward(data.to(self.device), class_depth*branch+class_depth) for i in range(1,len(labels)+1)]
+                performance = [torch.sum(torch.argmax(forward_runs[i][1],1)==targets[i].to(self.device))/len(targets[i].to(self.device)) for i in range(len(labels))]
                 print('Done with '+str(ep)+' epochs.\==============================')
                 print(str(loss.item())+': '+str(loss1.item())+' due to CSE loss :'+str(loss2.item())+' due to Isometric loss')
                 print('Classification rate: '+str(performance))
@@ -349,8 +349,8 @@ class HierarchicalRepresentationNetwork:
         class_depth = int(self.model.n_layers/len(labels))
         for batch_n, (data,targets,indices) in enumerate(data_loader):
             for branch in range(len(labels)):
-                out = self.prop_forward(data, class_depth*branch+class_depth)[1]
-                performance[branch].append(torch.sum(torch.argmax(out,1)==targets[branch]))
+                out = self.prop_forward(data.to(self.device), class_depth*branch+class_depth)[1]
+                performance[branch].append(torch.sum(torch.argmax(out,1)==targets[branch].to((self.device))))
         performance = [sum(performance[i])/data_loader.dataset.__len__() for i in range(len(labels))]
         return performance            
 
@@ -408,7 +408,7 @@ class HierarchicalRepresentationNetwork:
                     return x_step, init_pred
         return x_step, init_pred
         
-    def hierarchical_test_attack(self,test_loader, costs, epsilon, attack_method='fgsm'):
+    def hierarchical_test_attack(self,test_loader, costs, epsilon, attack_method='fgsm',featurize=False):
 
         labels = test_loader.dataset.labels
         labels_d = [pair_labels(labels[branch]) for branch in range(len(labels))]
@@ -420,7 +420,11 @@ class HierarchicalRepresentationNetwork:
         for batch_n, (data,targets,indices) in enumerate(test_loader):
             for branch in range(len(labels)):
                 labels_d = pair_labels(targets[branch])
-                dmat = torch.cdist(data,data).double()
+                if featurize:
+                    feat_map =  torch.squeeze(self.model.feature_model(data.double().to(self.device)))
+                    dmat = torch.cdist(feat_map,feat_map).double()
+                else:
+                    dmat = torch.cdist(data,data).double()
                 if attack_method=='fgsm':
                     perturbed_data, init_pred = self.fgsm_attack(data, targets[branch],epsilon,
                                                       costs[branch],class_depth*branch+class_depth,
