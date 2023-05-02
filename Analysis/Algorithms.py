@@ -25,7 +25,7 @@ from sklearn.linear_model import LinearRegression, Lasso, Ridge
 from sklearn.decomposition import PCA
 from sklearn.manifold import Isomap
 
-import umap.umap_ as umap
+#import umap.umap_ as umap
 
 
 class Manifold_Generator:
