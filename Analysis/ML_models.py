@@ -309,7 +309,9 @@ class HierarchicalRepresentationNetwork:
     def train(self, data_loader, costs, dmat="standard", epochs=100, plot=True):
         labels = data_loader.dataset.labels
         train_shape = data_loader.dataset.x.shape
-        train_data = torch.reshape(data_loader.dataset.x,[train_shape[0],np.prod(train_shape[1:])]).to(self.device)
+        train_data = torch.reshape(
+            data_loader.dataset.x, [train_shape[0], np.prod(train_shape[1:])]
+        )
         running_loss = [[] for l in range(len(labels))]
         running_loss1 = [[] for l in range(len(labels))]
         running_loss2 = [[] for l in range(len(labels))]
@@ -327,20 +329,24 @@ class HierarchicalRepresentationNetwork:
         for ep in pbar:
             for batch_n, (data, targets, indices) in enumerate(data_loader):
                 for branch in range(len(labels)):
-                    if dmat=='iterate':
-                        feat_map = torch.squeeze(self.model.feature_model(data.double().to(self.device)))
-                        dmat_temp = torch.cdist(feat_map,feat_map)
-                    labels_d = pair_labels(targets[branch]).to(self.device)
-                    
+                    if dmat == "iterate":
+                        feat_map = torch.squeeze(
+                            self.model.feature_model(data.double())
+                        )
+                        dmat_temp = torch.cdist(feat_map, feat_map)
+                    labels_d = pair_labels(targets[branch])
+
                     optimizer.zero_grad()
-                    
-                    outs = self.prop_forward(data.to(self.device),class_depth*branch+class_depth)
-                    loss1 = costs[branch][0](outs[1],targets[branch].to(self.device))
-                    if costs[branch][1]!=0:
-                        if dmat=='iterate':
-                            loss2, c = costs[branch][1](outs[0],dmat_temp,labels_d)
+
+                    outs = self.prop_forward(data, class_depth * branch + class_depth)
+                    loss1 = costs[branch][0](outs[1], targets[branch])
+                    if costs[branch][1] != 0:
+                        if dmat == "iterate":
+                            loss2, c = costs[branch][1](outs[0], dmat_temp, labels_d)
                         else:
-                            loss2, c = costs[branch][1](outs[0],dmat[indices,:][:,indices].to(self.device),labels_d)
+                            loss2, c = costs[branch][1](
+                                outs[0], dmat[indices, :][:, indices], labels_d
+                            )
                         Lipschitz_constants.append(c)
                     else:
                         loss2 = 0
@@ -360,19 +366,25 @@ class HierarchicalRepresentationNetwork:
                             branch
                         ].append(round(loss2.item(),2))
                         
-                    if batch_n%self.savepoints==0 or ep%self.savepoints==0:
-                        running_loss[branch].append(loss.item())
-                        running_loss1[branch].append(loss1.item()), running_loss2[branch].append(loss2.item())
-                        print('Done with '+ str(batch_n)+' batches and '+str(ep)+' epochs on branch ' + str(branch))
-                        print(str(loss.item())+': '+str(loss1.item())+' due to CSE loss :'+str(loss2.item())+' due to Isometric loss')
-                    
-            if ep%self.savepoints==0:
-                forward_runs = [self.prop_forward(data.to(self.device), class_depth*branch+class_depth) for i in range(1,len(labels)+1)]
-                performance = [torch.sum(torch.argmax(forward_runs[i][1],1)==targets[i].to(self.device))/len(targets[i].to(self.device)) for i in range(len(labels))]
-                print('Done with '+str(ep)+' epochs.\==============================')
-                print(str(loss.item())+': '+str(loss1.item())+' due to CSE loss :'+str(loss2.item())+' due to Isometric loss')
-                print('Classification rate: '+str(performance))
-                
+
+                    pbar.set_description(f"Epoch {ep}, batch {batch_n}. Loss = {tot_loss}; {first_loss} CSE; {second_loss} Isometric. Classification {performance}")
+
+
+            tot_loss = [branch_loss[-1] for branch_loss in running_loss]
+            first_loss = [branch_loss[-1] for branch_loss in running_loss1]
+            second_loss = [branch_loss[-1] for branch_loss in running_loss2]
+            forward_runs = [
+                self.prop_forward(data, class_depth * i + class_depth)
+                for i in range(len(labels))
+            ]
+            performance = [
+                round((torch.sum(torch.argmax(forward_runs[i][1], 1) == targets[i])
+                / len(targets[i])).item(),2)
+                for i in range(len(labels))
+            ]
+                # print("Classification rate: " + str(performance))
+
+
         if plot:
             plt.figure()
             for i in range(len(labels)):
@@ -393,10 +405,15 @@ class HierarchicalRepresentationNetwork:
         class_depth = int(self.model.n_layers / len(labels))
         for batch_n, (data, targets, indices) in enumerate(data_loader):
             for branch in range(len(labels)):
-                out = self.prop_forward(data.to(self.device), class_depth*branch+class_depth)[1]
-                performance[branch].append(torch.sum(torch.argmax(out,1)==targets[branch].to((self.device))))
-        performance = [sum(performance[i])/data_loader.dataset.__len__() for i in range(len(labels))]
-        return performance            
+                out = self.prop_forward(data, class_depth * branch + class_depth)[1]
+                performance[branch].append(
+                    torch.sum(torch.argmax(out, 1) == targets[branch])
+                )
+        performance = [
+            sum(performance[i]) / data_loader.dataset.__len__()
+            for i in range(len(labels))
+        ]
+        return performance
 
     def fgsm_attack(self, x, targets, epsilon, costs, depth, dmat, labels_d):
         x.requires_grad = True
@@ -455,8 +472,10 @@ class HierarchicalRepresentationNetwork:
                 ) * len(x_step.T):
                     return x_step, init_pred
         return x_step, init_pred
-        
-    def hierarchical_test_attack(self,test_loader, costs, epsilon, attack_method='fgsm',featurize=False):
+
+    def hierarchical_test_attack(
+        self, test_loader, costs, epsilon, attack_method="fgsm", featurize=False
+    ):
 
         labels = test_loader.dataset.labels
         labels_d = [pair_labels(labels[branch]) for branch in range(len(labels))]
@@ -469,20 +488,34 @@ class HierarchicalRepresentationNetwork:
             for branch in range(len(labels)):
                 labels_d = pair_labels(targets[branch])
                 if featurize:
-                    feat_map =  torch.squeeze(self.model.feature_model(data.double().to(self.device)))
-                    dmat = torch.cdist(feat_map,feat_map).double()
+                    feat_map = torch.squeeze(
+                        self.model.feature_model(data.double().to(self.device))
+                    )
+                    dmat = torch.cdist(feat_map, feat_map).double()
                 else:
-                    dmat = torch.cdist(data,data).double()
-                if attack_method=='fgsm':
-                    perturbed_data, init_pred = self.fgsm_attack(data, targets[branch],epsilon,
-                                                      costs[branch],class_depth*branch+class_depth,
-                                                      dmat,labels_d)
-                elif attack_method=='pgd':
-                    perturbed_data, init_pred = self.pdg_attack(data, targets[branch],epsilon,
-                                                      costs[branch],class_depth*branch+class_depth,
-                                                      dmat,labels_d)
+                    dmat = torch.cdist(data, data).double()
+                if attack_method == "fgsm":
+                    perturbed_data, init_pred = self.fgsm_attack(
+                        data,
+                        targets[branch],
+                        epsilon,
+                        costs[branch],
+                        class_depth * branch + class_depth,
+                        dmat,
+                        labels_d,
+                    )
+                elif attack_method == "pgd":
+                    perturbed_data, init_pred = self.pdg_attack(
+                        data,
+                        targets[branch],
+                        epsilon,
+                        costs[branch],
+                        class_depth * branch + class_depth,
+                        dmat,
+                        labels_d,
+                    )
                 else:
-                    print('Invalid attack method')
+                    print("Invalid attack method")
                     return
 
                 # Re-classify the perturbed image
