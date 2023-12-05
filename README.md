@@ -1,8 +1,8 @@
-#Code for Isometric Representations in Neural Networks Improve Robustness
+# Code for Isometric Representations in Neural Networks Improve Robustness
 =======
 # Hierarchical Isometric Networks
 
 
-##Requirements
+## Requirements
 - Umap
 - Pytorch
