@@ -9,6 +9,7 @@ import numpy as np
 import scipy.stats as st
 from torch.autograd import Variable
 from tqdm import tqdm
+import linecache
 
 # from torchviz import make_dot
 from torch.utils.data import Dataset
@@ -41,9 +42,9 @@ class NN_class(nn.Module):
         self.weights = weights
         self.n_layers = n_layers
         self.feature_model = feature_model
-        if self.feature_model != None:
-            for param in self.feature_model.parameters():
-                param.requires_grad = False
+        # if self.feature_model != None:
+        #     for param in self.feature_model.parameters():
+        #         param.requires_grad = False
 
         self.layers = nn.ModuleList()  # []
         self.inp_layer = nn.Linear(n_inputs, n_neurons, bias=True)
@@ -74,6 +75,27 @@ class NN_class(nn.Module):
             out1 = self.act_fun(layer(out1))
         return out1
 
+class CNN_Features(nn.Module):
+    def __init__(self, num_conv_layers=2, in_channels=3, first_layer_output=16, num_classes=10):
+        super(CNN_Features, self).__init__()
+        self.num_conv_layers = num_conv_layers
+        self.first_layer_output = first_layer_output
+        
+        self.features = nn.ModuleList()
+        self.features.append(nn.Conv2d(in_channels, self.first_layer_output, kernel_size=3, stride=1, padding=1))
+        self.features.append(nn.ReLU())
+        self.features.append(nn.MaxPool2d(kernel_size=2, stride=2))
+        
+        for i in range(num_conv_layers - 1):
+            self.features.append(nn.Conv2d(self.first_layer_output * 2 ** i, self.first_layer_output * 2 ** (i + 1), kernel_size=3, stride=1, padding=1))
+            self.features.append(nn.ReLU())
+            self.features.append(nn.MaxPool2d(kernel_size=2, stride=2))
+
+        
+    def forward(self, x):
+        for layer in self.features:
+            x = layer(x)
+        return x
 
 class Conv_Feature_NN_class(nn.Module):
     def __init__(self, feature_model, n_neurons, n_inputs, n_classes, n_layers=1):
@@ -334,14 +356,18 @@ class HierarchicalRepresentationNetwork:
                             self.model.feature_model(data.double())
                         )
                         dmat_temp = torch.cdist(feat_map, feat_map)
+                    elif dmat[:3]== "csv":
+                        dmat_temp = read_dmat_from_csv(dmat[4:], indices)
                     labels_d = pair_labels(targets[branch])
 
                     optimizer.zero_grad()
 
                     outs = self.prop_forward(data, class_depth * branch + class_depth)
-                    loss1 = costs[branch][0](outs[1], targets[branch])
+                    loss1 = costs[branch][0](outs[1], targets[branch].long())
                     if costs[branch][1] != 0:
                         if dmat == "iterate":
+                            loss2, c = costs[branch][1](outs[0], dmat_temp, labels_d)
+                        elif dmat[:3] == "csv":
                             loss2, c = costs[branch][1](outs[0], dmat_temp, labels_d)
                         else:
                             loss2, c = costs[branch][1](
@@ -567,3 +593,17 @@ def compute_featurized_distances(model, datapoints, targets):
                     dmat[class_inds[i], class_inds[j]] = d_class[i, j]
         print(c)
     return dmat.T + dmat
+ 
+
+def read_dmat_from_csv(input_file,indices):
+    dmat = [[] for i in range(len(indices))]
+    for i, ind in enumerate(indices):
+        row = linecache.getline(input_file,ind+1).strip().split(",")
+        for j, ind2 in enumerate(indices):
+            dmat[i].append(float(row[ind2]))
+    dmat = np.vstack(dmat)
+    return dmat + dmat.T
+            
+            
+            
+    

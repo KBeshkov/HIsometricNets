@@ -20,18 +20,22 @@ from ML_models import *
 
 
 #%%
+sys.path.append("C:\Repos\PyTorch_CIFAR10\\")
 from cifar10_models.vgg import vgg11_bn, vgg13_bn, vgg16_bn, vgg19_bn
 
 # Pretrained model
 feature_model = vgg13_bn(pretrained=True)
 feature_model.eval() # for evaluation
+
+feature_model = CNN_Features(first_layer_output=32)
 #%%
 Iso_coef = 0.01
 
-transform=transforms.Compose([transforms.ToTensor()])
+transform=transforms.Compose([transforms.ToTensor(),
+     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-data_train = datasets.CIFAR10('/scratch/users/constb/Data/', train=True, transform=transform)#, download=True)
-data_test = datasets.CIFAR10('/scratch/users/constb/Data/', train=False, transform=transform)#, download=True)
+data_train = datasets.CIFAR10('E:\Data\HIsom_Data', train=True, transform=transform, download=True)
+data_test = datasets.CIFAR10('E:\Data\HIsom_Data', train=False, transform=transform, download=True)
 
 
 data_train_hierarchy = HierarchicalDataset(data_train,conv=True)
@@ -45,28 +49,30 @@ data_part_test = data_test_hierarchy.__hierarchy__(partition)
 hierarchical_trainloader = torch.utils.data.DataLoader(data_train_hierarchy, batch_size=100, shuffle=True)
 hierarchical_testloader = torch.utils.data.DataLoader(data_test_hierarchy, batch_size=100, shuffle=True)
   
-precomputed_dmat = True
+precomputed_dmat = 'csv'
 if precomputed_dmat == True:
-    CIFAR_dmat = torch.load('/scratch/users/constb/Data/CIFAR10_dmat_features.pt').double() #Precomputed distance matrix between MNIST images
+    CIFAR_dmat = torch.load('E:\Data\HIsom_Data\CIFAR10_dmat_features.pt').double() #Precomputed distance matrix between MNIST images
 elif precomputed_dmat=='standard':
     CIFAR_dmat='standard'
+elif precomputed_dmat=='csv':
+    CIFAR_dmat = 'csv:E:/Data/HIsom_Data/CIFAR10_dmat.csv'
 else:
     CIFAR_dmat='iterate'
 res = int(2*(data_train[0][0].size()[-1]/2)**2)
 
 #%% Train Model
-nlayers = 10
+nlayers = 3
 nclass = len(partition)
-n_nrns = 500
+n_nrns = 100
 network_params = {'n_neurons': n_nrns, 'n_inputs': res,'n_classes': 10,
-                  'projection': [],'weights': [],'n_layers': nclass*nlayers,'feature_model':feature_model.features}
-HRIM = HierarchicalRepresentationNetwork(NN_class(**network_params).double().to('cuda'),savepoints=25,device='cuda')
+                  'projection': [],'weights': [],'n_layers': nclass*nlayers,'feature_model':feature_model}
+HRIM = HierarchicalRepresentationNetwork(NN_class(**network_params).double().to('cpu'),savepoints=25,device='cpu')
 
 #%%
-K = 1
+K = 0.01
 costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss]]
 
-HRIM_data = HRIM.train(hierarchical_trainloader, costs, dmat=CIFAR_dmat,epochs=150)
+HRIM_data = HRIM.train(hierarchical_trainloader, costs, dmat=CIFAR_dmat,epochs=50)
 
 #%% Test model
 HRIM_test = HRIM.test(hierarchical_testloader)
