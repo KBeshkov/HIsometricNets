@@ -42,6 +42,7 @@ class NN_class(nn.Module):
         self.weights = weights
         self.n_layers = n_layers
         self.feature_model = feature_model
+        self.feature_model.requires_grad = True
         # if self.feature_model != None:
         #     for param in self.feature_model.parameters():
         #         param.requires_grad = False
@@ -63,6 +64,7 @@ class NN_class(nn.Module):
     def forward(self, x):
         if self.feature_model != None:
             x = self.feature_model(x.double())
+            x = x.reshape(len(x),-1)
         out1 = self.act_fun(self.inp_layer(torch.squeeze(x.double())))
         for layer in self.layers:
             out1 = self.act_fun(layer(out1))
@@ -170,7 +172,7 @@ class MetricPreservationLoss(nn.Module):
         est_dmats = metric(y, y)
         crit1 = nn.MSELoss()
         # loss = self.lambda1*crit1(Y*est_dmats/(self.lambda2*torch.max(Y*est_dmats)),Y*y1_dmats/torch.max(Y*y1_dmats))**2
-        loss = self.lambda1 * crit1(self.lambda2 * Y * est_dmats, Y * y_dmats)
+        loss = self.lambda1 * crit1((self.lambda2 * Y * est_dmats).float(), (Y * y_dmats).float())
         return loss, (torch.max(Y * y_dmats) / torch.max(Y * est_dmats)).item()
 
 
@@ -513,13 +515,13 @@ class HierarchicalRepresentationNetwork:
         for batch_n, (data, targets, indices) in enumerate(test_loader):
             for branch in range(len(labels)):
                 labels_d = pair_labels(targets[branch])
-                if featurize:
-                    feat_map = torch.squeeze(
-                        self.model.feature_model(data.double().to(self.device))
-                    )
-                    dmat = torch.cdist(feat_map, feat_map).double()
-                else:
-                    dmat = torch.cdist(data, data).double()
+                # if featurize:
+                #     feat_map = torch.squeeze(
+                #         self.model.feature_model(data.double().to(self.device))
+                #     )
+                #     dmat = torch.cdist(feat_map, feat_map).double()
+                # else:
+                dmat = torch.cdist(data.reshape(len(data),-1), data.reshape(len(data),-1)).double()
                 if attack_method == "fgsm":
                     perturbed_data, init_pred = self.fgsm_attack(
                         data,
@@ -605,5 +607,16 @@ def read_dmat_from_csv(input_file,indices):
     return dmat + dmat.T
             
             
-            
+def saliency_map(image, model, label, n_classes = 10, threshold = 0.25):
+    image.requires_grad = True
+    out = model(image)[1]
+    model.zero_grad()
+    grad = torch.zeros(n_classes)
+    grad[torch.argmax(out)] = 1
+    out.backward(gradient=grad)    
+    saliency_map = image.grad.data.abs().max(dim=1)[0]
+    saliency_map = (saliency_map - saliency_map.min()) / (saliency_map.max() - saliency_map.min())
+    saliency_map[saliency_map<threshold] = torch.nan
+    return saliency_map.detach().numpy()
+    
     
