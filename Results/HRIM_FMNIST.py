@@ -16,7 +16,7 @@ from Algorithms import *
 from metrics import *
 from ML_models import *
 
-Iso_coef = 0.1
+Iso_coef = 10
 
 transform=transforms.Compose([transforms.ToTensor()])
 
@@ -26,9 +26,10 @@ data_test = datasets.FashionMNIST('/Users/kosio/Data/FashionMNIST/', train=False
 data_train_hierarchy = HierarchicalDataset(data_train)
 data_test_hierarchy = HierarchicalDataset(data_test)
 
-partition = [[[[0, 1, 2, 3, 4, 6], [5, 7, 8, 9]]],
-    [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]],
-]
+# partition = [[[[0, 1, 2, 3, 4, 6], [5, 7, 8, 9]]],
+#     [[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]],
+# ]
+partition = [[[0], [1], [2], [3], [4], [5], [6], [7], [8], [9]]]
 
 data_part_train = data_train_hierarchy.__hierarchy__(partition)
 data_part_test = data_test_hierarchy.__hierarchy__(partition)
@@ -48,12 +49,12 @@ network_params = {'n_neurons': n_nrns, 'n_inputs': res**2,'n_classes': 10,
                   'projection': [],'weights': [],'n_layers': nclass*nlayers}
 HRIM = HierarchicalRepresentationNetwork(NN_class(**network_params).double().to('cpu'),savepoints=25)
 
-K = 10
+K = 1
 
-costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss],
-         [nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss]]
+costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss]]#,
+#        [nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss]]
 
-HRIM_data = HRIM.train(hierarchical_trainloader, costs, dmat=FMNIST_dmat,epochs=5)
+HRIM_data = HRIM.train(hierarchical_trainloader, costs, dmat=FMNIST_dmat,epochs=10)
 
 #%% Test model
 HRIM_test = HRIM.test(hierarchical_testloader)
@@ -65,7 +66,8 @@ print(HRIM_test)
 epsilons = np.logspace(-2,0,10)
 
 
-costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss]]
+costs = [[nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss]]#,
+        # [nn.CrossEntropyLoss(),MetricPreservationLoss(Iso_coef, K).Loss]]
 
 attack_type = 'fgsm'
 adv_attacks = []
@@ -88,6 +90,8 @@ orig_labels = [adv_attacks[i][1][-1][0] for i in range(len(epsilons))]
 pert_labels = [adv_attacks[i][1][-1][1] for i in range(len(epsilons))]
 distances = [torch.sum(torch.abs(orig_labels[i]-pert_labels[i])).detach().numpy() for i in range(len(epsilons))]
 
-np.save('../Data/fgsm_temp/class_curves_'+attack_type+str(Iso_coef)+'.npy',class_performance[:,-1])
+np.save('../Data/fgsm_temp/class_curves_'+attack_type+str(Iso_coef)+'fmnist.npy',class_performance[:,-1])
+# np.save('../Data/fgsm_temp/class_curves_'+attack_type+str(Iso_coef)+'part_fmnist.npy',class_performance[:,-1])
+
 # np.save('../Data/FGSM_tree_nomax/distances_'+attack_type+str(Iso_coef)+'.npy',np.array(tree_distance))
 

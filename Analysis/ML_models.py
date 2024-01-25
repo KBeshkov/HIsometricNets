@@ -42,10 +42,10 @@ class NN_class(nn.Module):
         self.weights = weights
         self.n_layers = n_layers
         self.feature_model = feature_model
-        self.feature_model.requires_grad = True
-        # if self.feature_model != None:
-        #     for param in self.feature_model.parameters():
-        #         param.requires_grad = False
+        if self.feature_model != None:
+            self.feature_model.requires_grad = True
+            # for param in self.feature_model.parameters():
+            #     param.requires_grad = False
 
         self.layers = nn.ModuleList()  # []
         self.inp_layer = nn.Linear(n_inputs, n_neurons, bias=True)

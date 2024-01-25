@@ -6,7 +6,9 @@ plt.rcParams['font.family'] = 'Arial'
 plt.rcParams.update({'font.size': 14})
 rocket = sns.color_palette("rocket",9)
 
-attack = 'fgsm_temp/'
+
+data_name = 'fmnist'
+attack = 'fgsm_temp/no_part/'
 path = '../Data/'+attack
 
 epsilons=np.logspace(-2,0,10)
@@ -15,9 +17,15 @@ distance_curves = {}
 for filename in os.listdir(path):
     if filename[:5]=='class':
         print(filename)
-        class_curves[filename[17:-4]]=np.load(path+filename)
-        
-curve_mat = np.vstack(class_curves.values())
+        if data_name=='mnist':
+            class_curves[filename[17:-4]]=np.load(path+filename)
+        elif data_name=='fmnist':
+            class_curves[filename[17:-10]]=np.load(path+filename)
+        elif data_name=='fmnist_part':
+            class_curves[filename[17:-15]]=np.load(path+filename)
+            
+
+curve_mat = np.vstack(list(class_curves.values()))
 
 
 legend_lbls = []
@@ -34,4 +42,4 @@ plt.xlabel('$\epsilon$')
 plt.ylabel('Classification rate')
 plt.ylim(0,1)
 plt.tight_layout()
-# plt.savefig('../Figures/Classification_robustness_fgsm.png',dpi=1000,transparent=True)
+plt.savefig('../Figures/Classification_robustness_fgsm_'+data_name+'.png',dpi=1000,transparent=True)

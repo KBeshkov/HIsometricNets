@@ -29,13 +29,13 @@ from cifar10_models.vgg import vgg11_bn, vgg13_bn, vgg16_bn, vgg19_bn
 
 feature_model = CNN_Features(first_layer_output=128).double()
 #%%
-Iso_coef = 0.01
+Iso_coef = 2
 
 transform=transforms.Compose([transforms.ToTensor(),
      transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
 
 data_train = datasets.CIFAR10('/Users/kosio/Repos/HIsometricNets/Data/', train=True, transform=transform, download=True)
-data_test = datasets.CIFAR10('/Users/kosio/Repos/HIsometricNets/Data/', train=False, transform=transform, download=True)
+data_test = datasets.CIFAR10('/Users/kosio/Repos/HIsometricNets/Data/', train=False, transform=transform, shuffle=False, download=True)
 
 
 data_train_hierarchy = HierarchicalDataset(data_train,conv=True)
