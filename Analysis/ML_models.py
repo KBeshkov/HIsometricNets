@@ -308,6 +308,9 @@ class HierarchicalRepresentationNetwork:
     def prop_forward(self, x, stop_layer):
         if self.model.n_layers == stop_layer:
             return self.model.forward(x)
+        if self.model.feature_model!=None:
+            x = self.model.feature_model(x.double())
+            x = x.reshape(len(x),-1)
         out = self.model.act_fun(self.model.inp_layer(x.double()))
         for layer in self.model.layers[:stop_layer]:
             out = self.model.act_fun(layer(out))
@@ -442,6 +445,24 @@ class HierarchicalRepresentationNetwork:
             for i in range(len(labels))
         ]
         return performance
+    
+    def saliency_map(self, x, targets, threshold = 0.25):
+        x.requires_grad = True
+        class_depth = int(self.model.n_layers / len(targets))
+        saliency_maps = []
+        for branch in range(len(targets)):
+            out = self.prop_forward(x, class_depth*branch+class_depth)[1]
+            self.model.zero_grad()
+            grad = torch.zeros(len(targets[branch]),self.model.n_classes)
+            for n, dirct in enumerate(targets[branch]):
+                grad[n,dirct] = 1
+            out.backward(gradient=grad)    
+            saliency_map = x.grad.data.abs().max(dim=1)[0]
+            saliency_map = (saliency_map - saliency_map.min()) / (saliency_map.max() - saliency_map.min())
+            saliency_map[saliency_map<threshold] = torch.nan
+            saliency_maps.append(saliency_map.detach().numpy())
+        return saliency_maps
+        
 
     def fgsm_attack(self, x, targets, epsilon, costs, depth, dmat, labels_d):
         x.requires_grad = True
@@ -607,16 +628,4 @@ def read_dmat_from_csv(input_file,indices):
     return dmat + dmat.T
             
             
-def saliency_map(image, model, label, n_classes = 10, threshold = 0.25):
-    image.requires_grad = True
-    out = model(image)[1]
-    model.zero_grad()
-    grad = torch.zeros(n_classes)
-    grad[torch.argmax(out)] = 1
-    out.backward(gradient=grad)    
-    saliency_map = image.grad.data.abs().max(dim=1)[0]
-    saliency_map = (saliency_map - saliency_map.min()) / (saliency_map.max() - saliency_map.min())
-    saliency_map[saliency_map<threshold] = torch.nan
-    return saliency_map.detach().numpy()
-    
     

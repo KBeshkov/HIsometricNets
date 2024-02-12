@@ -1,4 +1,5 @@
 from Algorithms import *
+import cv2
 
 def geodesic(X,r=-1,eps=0.1,count=1):
     Xn = np.copy(X)
@@ -93,4 +94,14 @@ def hierarchical_labeling_from_data(labels,pairings):
            lbls_new.append(np.where(l == pairings)[0][0])
        return np.asarray(lbls_new)
  
-
+    
+def laplacian_filter(image):
+    # if len(image.shape) == 3:
+        # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    laplacian = cv2.Laplacian((255*image).astype(np.uint8), cv2.CV_64F)
+    
+    # # Convert back to uint8 and scale to 0-255
+    laplacian = np.uint8(np.absolute(laplacian))
+    
+    return laplacian
