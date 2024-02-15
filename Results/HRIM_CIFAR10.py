@@ -29,13 +29,13 @@ from cifar10_models.vgg import vgg11_bn, vgg13_bn, vgg16_bn, vgg19_bn
 
 feature_model = CNN_Features(first_layer_output=128).double()
 #%%
-Iso_coef = 2
+Iso_coef = 0.1
 
 transform=transforms.Compose([transforms.ToTensor(),
      transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2471, 0.2435, 0.2616))])
 
 data_train = datasets.CIFAR10('/Users/kosio/Repos/HIsometricNets/Data/', train=True, transform=transform, download=True)
-data_test = datasets.CIFAR10('/Users/kosio/Repos/HIsometricNets/Data/', train=False, transform=transform, shuffle=False, download=True)
+data_test = datasets.CIFAR10('/Users/kosio/Repos/HIsometricNets/Data/', train=False, transform=transform, download=True)
 
 
 data_train_hierarchy = HierarchicalDataset(data_train,conv=True)
@@ -47,7 +47,7 @@ data_part_train = data_train_hierarchy.__hierarchy__(partition)
 data_part_test = data_test_hierarchy.__hierarchy__(partition)
 
 hierarchical_trainloader = torch.utils.data.DataLoader(data_train_hierarchy, batch_size=100, shuffle=True)
-hierarchical_testloader = torch.utils.data.DataLoader(data_test_hierarchy, batch_size=100, shuffle=True)
+hierarchical_testloader = torch.utils.data.DataLoader(data_test_hierarchy, batch_size=100, shuffle=False)
   
 precomputed_dmat = 'standard'
 if precomputed_dmat == True:
@@ -103,6 +103,16 @@ pert_images2 = [adv_attacks[i][1][-1][3][3].T for i in range(len(epsilons))]
 pert_labels2 = [adv_attacks[i][1][-1][1][3] for i in range(len(epsilons))]
 saliency_maps1 = [saliency_map(torch.Tensor(orig_images1[i]).T[None], HRIM.model, orig_labels1[i],threshold=0.3) for i in range(len(epsilons))]
 saliency_maps2 = [saliency_map(torch.Tensor(orig_images2[i]).T[None], HRIM.model, orig_labels2[i],threshold=0.3) for i in range(len(epsilons))]
+
+#%%
+saliency_maps = [saliency_map(torch.Tensor(adv_attacks[0][1][-1][2][i].T).T[None], 
+                              HRIM.model, hierarchical_testloader.dataset.labels[0][i],
+                              threshold=0) for i in range(len(adv_attacks[0][1][-1][2]))]
+
+laplacian_distributions = [laplacian_filter(saliency_maps[i].T).flatten() for i in range(len(saliency_maps))]
+total_distrib = np.vstack(laplacian_distributions).flatten()
+
+np.save('../Data/laplace_smooth'+str(Iso_coef)+'CIFAR10.npy',total_distrib)
 
 #%%
 fig, ax = plt.subplots(6,len(epsilons))

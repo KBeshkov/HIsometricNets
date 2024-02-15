@@ -48,7 +48,8 @@ class NN_class(nn.Module):
             #     param.requires_grad = False
 
         self.layers = nn.ModuleList()  # []
-        self.inp_layer = nn.Linear(n_inputs, n_neurons, bias=True)
+        inp_layer = nn.Linear(n_inputs, n_neurons, bias=True)
+        self.layers.append(inp_layer.double())
         if len(self.projection) > 0:
             self.inp_layer.weight.data = projection
         self.act_fun = nn.Tanh()  #nn.ReLU()# torch.sin##nn.Hardtanh()#
@@ -64,18 +65,18 @@ class NN_class(nn.Module):
     def forward(self, x):
         if self.feature_model != None:
             x = self.feature_model(x.double())
-            x = x.reshape(len(x),-1)
-        out1 = self.act_fun(self.inp_layer(torch.squeeze(x.double())))
+            x = torch.squeeze(x.reshape(len(x),-1))
+        else:
+            x = torch.squeeze(x.double())
         for layer in self.layers:
-            out1 = self.act_fun(layer(out1))
-        out2 = self.class_layer(out1)
-        return out1, out2
+            x = self.act_fun(layer(x))
+        out = self.class_layer(x)
+        return x, out
 
     def lim_forward(self, x, layer_stop):
-        out1 = self.act_fun(self.inp_layer(x.double()))
         for layer in self.layers[:-layer_stop]:
-            out1 = self.act_fun(layer(out1))
-        return out1
+            x = self.act_fun(layer(x.double()))
+        return x
 
 class CNN_Features(nn.Module):
     def __init__(self, num_conv_layers=2, in_channels=3, first_layer_output=16, num_classes=10):
@@ -173,7 +174,7 @@ class MetricPreservationLoss(nn.Module):
         crit1 = nn.MSELoss()
         # loss = self.lambda1*crit1(Y*est_dmats/(self.lambda2*torch.max(Y*est_dmats)),Y*y1_dmats/torch.max(Y*y1_dmats))**2
         loss = self.lambda1 * crit1((self.lambda2 * Y * est_dmats).float(), (Y * y_dmats).float())
-        return loss, (torch.max(Y * y_dmats) / torch.max(Y * est_dmats)).item()
+        return loss
 
 
 def pair_labels(labels):
@@ -195,7 +196,7 @@ def train(net, train_dat, optimizer, criterion_weights, dmat, epochs, batch_sz=2
     labels = torch.tensor(train_dat[1][batch_ind].type(torch.LongTensor))
     labels_d = pair_labels(labels)
     save_outputs = []
-    Lipschitz_constants = []
+    
     criterion1 = nn.CrossEntropyLoss()
     criterion2 = MetricPreservationLoss(lambda1=criterion_weights[1], lambda2=1).Loss    
     pbar = tqdm(range(epochs),ncols=150)
@@ -209,8 +210,7 @@ def train(net, train_dat, optimizer, criterion_weights, dmat, epochs, batch_sz=2
             # forward + backward + optimize
             outputs1, outputs2 = net(inputs)
             loss1 = criterion_weights[0] * criterion1(outputs2, labels)
-            loss2, c = criterion2(outputs1, dmat, labels_d)
-            Lipschitz_constants.append(c)
+            loss2 = criterion2(outputs1, dmat, labels_d)
             loss = loss1 + loss2
             loss.backward()
             optimizer.step()
@@ -225,8 +225,7 @@ def train(net, train_dat, optimizer, criterion_weights, dmat, epochs, batch_sz=2
         if epoch % 50 == 0 or epoch == 0:
             save_outputs.append(outputs1)
 
-    return loss_curve, loss1_curve, loss2_curve, save_outputs, Lipschitz_constants
-
+    return loss_curve, loss1_curve, loss2_curve, save_outputs
 
 def predict(net, test_dat):
     n_classes = net.n_classes
@@ -311,20 +310,20 @@ class HierarchicalRepresentationNetwork:
         if self.model.feature_model!=None:
             x = self.model.feature_model(x.double())
             x = x.reshape(len(x),-1)
-        out = self.model.act_fun(self.model.inp_layer(x.double()))
         for layer in self.model.layers[:stop_layer]:
-            out = self.model.act_fun(layer(out))
-        class_out = self.model.class_layer(out)
-        return out, class_out
+            x = self.model.act_fun(layer(x))
+        class_out = self.model.class_layer(x)
+        return x, class_out
 
     def restricted_backward_pass(self, loss, stop_layer):
         count_layer = 0
-        for params in self.model.parameters():
-            params.requires_grad = False
-            if count_layer == stop_layer:
-                break
-            if len(params.size()) == 2:
-                count_layer += 1
+        if stop_layer!=0:
+            for params in self.model.parameters():
+                params.requires_grad = False
+                if count_layer == stop_layer:
+                    break
+                if len(params.size()) == 2: #takes care of removing convolutional feature layers
+                    count_layer += 1
         loss.backward()
         return
 
@@ -343,7 +342,7 @@ class HierarchicalRepresentationNetwork:
         running_loss1 = [[] for l in range(len(labels))]
         running_loss2 = [[] for l in range(len(labels))]
         mflds_train = []
-        Lipschitz_constants = []
+        
         optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
         if dmat == "standard":
             dmat = torch.cdist(train_data, train_data).to(self.device)
@@ -371,14 +370,13 @@ class HierarchicalRepresentationNetwork:
                     loss1 = costs[branch][0](outs[1], targets[branch].long())
                     if costs[branch][1] != 0:
                         if dmat == "iterate":
-                            loss2, c = costs[branch][1](outs[0], dmat_temp, labels_d)
+                            loss2 = costs[branch][1](outs[0], dmat_temp, labels_d)
                         elif dmat[:3] == "csv":
-                            loss2, c = costs[branch][1](outs[0], dmat_temp, labels_d)
+                            loss2 = costs[branch][1](outs[0], dmat_temp, labels_d)
                         else:
-                            loss2, c = costs[branch][1](
+                            loss2 = costs[branch][1](
                                 outs[0], dmat[indices, :][:, indices], labels_d
                             )
-                        Lipschitz_constants.append(c)
                     else:
                         loss2 = 0
                     loss = loss1 + loss2
@@ -398,7 +396,7 @@ class HierarchicalRepresentationNetwork:
                         ].append(round(loss2.item(),2))
                         
 
-                    pbar.set_description(f"Epoch {ep}, batch {batch_n}. Loss = {tot_loss}; {first_loss} CSE; {second_loss} Isometric. Classification {performance}")
+                    pbar.set_description(f"Ep {ep}, btch {batch_n}. Loss={tot_loss}; {first_loss} CSE; {second_loss} Iso. Class {performance}")
 
 
             tot_loss = [branch_loss[-1] for branch_loss in running_loss]
@@ -428,7 +426,7 @@ class HierarchicalRepresentationNetwork:
                 plt.xscale("log"), plt.yscale("log")
             plt.tight_layout()
         mflds_train.append(forward_runs)
-        return mflds_train, Lipschitz_constants
+        return mflds_train
 
     def test(self, data_loader):
         labels = data_loader.dataset.labels
@@ -441,7 +439,7 @@ class HierarchicalRepresentationNetwork:
                     torch.sum(torch.argmax(out, 1) == targets[branch])
                 )
         performance = [
-            sum(performance[i]) / data_loader.dataset.__len__()
+            (sum(performance[i]) / data_loader.dataset.__len__()).item()
             for i in range(len(labels))
         ]
         return performance
@@ -473,7 +471,7 @@ class HierarchicalRepresentationNetwork:
         # Calculate the loss
         loss1 = costs[0](out[1], targets)
         if costs[1] != 0:
-            loss2, _ = costs[1](out[0], dmat, labels_d)
+            loss2 = costs[1](out[0], dmat, labels_d)
         else:
             loss2 = 0
         loss = loss1 + loss2
@@ -504,7 +502,7 @@ class HierarchicalRepresentationNetwork:
             # Calculate the loss
             loss1 = costs[0](prediction[1], targets)
             if costs[1] != 0:
-                loss2, _ = costs[1](prediction[0], dmat, labels_d)
+                loss2 = costs[1](prediction[0], dmat, labels_d)
             else:
                 loss2 = 0
             loss = loss1 + loss2
